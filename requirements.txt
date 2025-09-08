@@ -1,0 +1,9 @@
+google-analytics-data
+google-api-core
+google-auth
+google-cloud-core
+google-auth-oauthlib
+google-resumable-media
+google-cloud-bigquery
+psycopg2-binary
+flask
