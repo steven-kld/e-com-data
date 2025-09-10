@@ -187,8 +187,6 @@ def query_last_ga_events():
 
             processed_dict['event_params']['products'] = products_list
 
-        if row_dict.get('user_pseudo_id') == '9sB97AujhrtASJrbkDXRBD5oecUkZuPGgut/XOmvqoI=.1757512786':
-            print(json.dumps(processed_dict, indent=2))
         processed_rows.append(processed_dict)
     
     return processed_rows
