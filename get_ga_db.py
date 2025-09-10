@@ -5,7 +5,6 @@ from google.cloud import bigquery
 from dotenv import load_dotenv
 from db import run_query, run_many_query
 
-
 load_dotenv()
 
 GA_EVENTS_TABLE = os.getenv('GA_EVENTS_TABLE')
@@ -70,7 +69,7 @@ def query_last_ga_events():
     processed_rows = []
     for row in results:
         row_dict = dict(row.items())
-        print(row_dict)
+        # print(json.dumps(row_dict, indent=2))
         processed_dict = {}
         processed_dict['event_timestamp'] = row_dict.get('event_timestamp')
         processed_dict['event_name'] = row_dict.get('event_name')

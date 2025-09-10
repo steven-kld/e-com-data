@@ -1,7 +1,6 @@
 import os
-import json, pytz
+import json
 import requests
-from datetime import datetime
 from dotenv import load_dotenv
 from db import run_query
 
@@ -98,8 +97,6 @@ def extract_last_shopify_orders():
     else:
         # Get the current date and set the time to 00:00:00
         start_date_iso = last_order_date.isoformat()
-        print(f"Fetching new purchases from Shopify since {start_date_iso}...")
-        print(start_date_iso)
         
         print(f"Fetching new purchases from Shopify since {start_date_iso}...")
         orders_data = get_orders_data(shopify_api_key, shopify_domain, start_date_iso)

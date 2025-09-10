@@ -20,6 +20,7 @@ CREATE TABLE orders (
     utm_source TEXT,
     utm_campaign TEXT,
     utm_medium TEXT,
+    utm_term TEXT,
     ga_user_pseudo_id TEXT,
     CONSTRAINT fk_customer
         FOREIGN KEY(shopify_customer_id)
