@@ -37,16 +37,7 @@ def init_google_credentials():
         print(f"ERROR: Failed to initialize credentials. Check your .env file. Error: {e}")
         return None
     
-def query_last_ga_events():
-    last_event_numeric_timestamp = run_query(
-        """
-        SELECT event_timestamp_numeric
-        FROM ga_events 
-        ORDER BY event_timestamp DESC
-        LIMIT 1;
-        """, (), fetch_one=True
-    ).get('event_timestamp_numeric')
-
+def query_last_ga_events():    
     client = bigquery.Client(credentials=init_google_credentials())
     query_sql = f"""
         SELECT
@@ -54,12 +45,23 @@ def query_last_ga_events():
             event_timestamp,
             event_name,
             user_pseudo_id,
+            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
+            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
+            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
+            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
+            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
             event_params,
             ecommerce,
             items
         FROM
             `{GA_EVENTS_TABLE}`
-        WHERE event_timestamp > {last_event_numeric_timestamp}
+        WHERE
+            EXISTS (
+                SELECT 1
+                FROM UNNEST(event_params) AS param
+                WHERE param.key LIKE 'utm_%'
+            ) 
+            OR event_name IN ('purchase', 'form_submit', 'begin_checkout', 'add_to_cart')
         ORDER BY event_timestamp DESC
     """
 

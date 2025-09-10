@@ -8,7 +8,6 @@ def main_run():
         insert_ga_events(ga_events)
 
     orders_data = extract_last_shopify_orders()
-    print(orders_data)
     for order in orders_data:
         insert_or_update_customer_from_order(order)
         insert_order_data(order)

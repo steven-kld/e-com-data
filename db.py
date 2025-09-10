@@ -49,7 +49,6 @@ def run_query(query, params=None, fetch_one=False, fetch_all=False):
         raise RuntimeError(f"Failed to insert: {str(e)}")
 
 def run_many_query(query: str, data: list, page_size=1000):
-    print(data)
     conn = None
     try:
         conn = get_conn()
