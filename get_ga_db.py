@@ -3,7 +3,7 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 from google.cloud import bigquery
 from dotenv import load_dotenv
-from db import run_query, run_many_query
+from db import run_many_query
 
 load_dotenv()
 
@@ -40,29 +40,89 @@ def init_google_credentials():
 def query_last_ga_events():    
     client = bigquery.Client(credentials=init_google_credentials())
     query_sql = f"""
-        SELECT
-            event_date,
-            event_timestamp,
-            event_name,
-            user_pseudo_id,
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
-            event_params,
-            ecommerce,
-            items
-        FROM
-            `{GA_EVENTS_TABLE}`
-        WHERE
-            EXISTS (
-                SELECT 1
-                FROM UNNEST(event_params) AS param
-                WHERE param.key LIKE 'utm_%'
-            ) 
-            OR event_name IN ('purchase', 'form_submit', 'begin_checkout', 'add_to_cart')
-        ORDER BY event_timestamp DESC
+        # Category 1: Purchase-related events
+        (
+            SELECT
+                event_date,
+                event_timestamp,
+                event_name,
+                user_pseudo_id,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                event_params,
+                ecommerce,
+                items
+            FROM
+                `{GA_EVENTS_TABLE}`
+            WHERE
+                event_name IN ('purchase', 'form_submit', 'add_payment_info', 'add_shipping_info', 'begin_checkout', 'add_to_cart')
+        )
+
+        UNION ALL
+
+        # Category 2: Events with UTMs
+        (
+            SELECT
+                event_date,
+                event_timestamp,
+                event_name,
+                user_pseudo_id,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                event_params,
+                ecommerce,
+                items
+            FROM
+                `{GA_EVENTS_TABLE}`
+            WHERE
+                EXISTS (SELECT 1 FROM UNNEST(event_params) AS param WHERE param.key LIKE 'utm_%')
+        )
+
+        UNION ALL
+
+        # Category 3: Earliest event for users with no UTMs or purchase-related events
+        (
+            WITH excluded_users AS (
+                SELECT DISTINCT user_pseudo_id
+                FROM `{GA_EVENTS_TABLE}`
+                WHERE 
+                    event_name IN ('purchase', 'form_submit', 'add_payment_info', 'add_shipping_info', 'begin_checkout', 'add_to_cart')
+                    OR EXISTS (SELECT 1 FROM UNNEST(event_params) AS param WHERE param.key LIKE 'utm_%')
+            ),
+            earliest_events AS (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER(PARTITION BY user_pseudo_id ORDER BY event_timestamp) AS rn
+                FROM `{GA_EVENTS_TABLE}`
+                WHERE
+                    user_pseudo_id NOT IN (SELECT user_pseudo_id FROM excluded_users)
+            )
+            SELECT
+                event_date,
+                event_timestamp,
+                event_name,
+                user_pseudo_id,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                event_params,
+                ecommerce,
+                items
+            FROM
+                earliest_events
+            WHERE
+                rn = 1
+        )
+
+        ORDER BY event_timestamp DESC;
     """
 
     query_job = client.query(query_sql)
@@ -98,22 +158,39 @@ def query_last_ga_events():
         processed_dict['utm_medium'] = event_params_flat.get('medium')
         processed_dict['utm_term'] = event_params_flat.get('term')
 
-        if row_dict['event_name'] == 'purchase':
-            processed_dict['event_params']['order_total'] = row_dict['ecommerce']['purchase_revenue']
-            processed_dict['event_params']['shipping_value'] = row_dict['ecommerce']['shipping_value']
+        if row_dict['event_name'] in ['purchase', 'form_submit', 'add_payment_info', 'add_shipping_info', 'begin_checkout', 'add_to_cart']:
+            try:
+                processed_dict['event_params']['order_total'] = row_dict['ecommerce']['purchase_revenue']
+                processed_dict['event_params']['shipping_value'] = row_dict['ecommerce']['shipping_value']
+            except:
+                processed_dict['event_params']['order_total'] = event_params_flat.get('value')
+                processed_dict['event_params']['shipping_value'] = 0
             
             products_list = []
             for product in row_dict['items']:
+                price = product.get('price') or 0
+                quantity = product.get('quantity') or 0
                 products_list.append({
-                    "name": product['item_name'],
-                    "price": product['price'],
-                    "quantity": product['quantity']
+                    "item_id": int(product.get('item_id', 0)),
+                    "price": float(price),
+                    "quantity": int(quantity)
                 })
+
+            order_total = processed_dict['event_params'].get('order_total') or event_params_flat.get('value') or 0
+            shipping_value = processed_dict['event_params'].get('shipping_value') or 0
+
+            products_sum = sum(p['price'] * p['quantity'] for p in products_list)
+
+            if order_total == 0 or shipping_value == 0:
+                processed_dict['event_params']['order_total'] = order_total
+                processed_dict['event_params']['shipping_value'] = order_total - products_sum
 
             processed_dict['event_params']['products'] = products_list
 
+        if row_dict.get('user_pseudo_id') == '9sB97AujhrtASJrbkDXRBD5oecUkZuPGgut/XOmvqoI=.1757512786':
+            print(json.dumps(processed_dict, indent=2))
         processed_rows.append(processed_dict)
-
+    
     return processed_rows
 
 def insert_ga_events(events_list):
@@ -166,8 +243,3 @@ def insert_ga_events(events_list):
     # Execute the batch insert if there is data to insert
     if data_to_insert:
         run_many_query(query_sql, data_to_insert)
-
-
-
-
-

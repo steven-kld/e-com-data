@@ -42,14 +42,11 @@ def get_orders_data(api_key: str, domain: str, created_at_min: str):
             line_items = order.get('line_items', [])
             for item in line_items:
                 product_id = item.get('product_id')
-                product_name = item.get('name')
                 product_price = item.get('price')
                 product_quantity = item.get('quantity')
-                product_url = f"https://{domain}/products/{product_id}" if product_id else "N/A"
 
                 products_list.append({
-                    "name": product_name,
-                    "url": product_url,
+                    "item_id": product_id,
                     "price": product_price,
                     "quantity": product_quantity
                 })

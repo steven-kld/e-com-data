@@ -30,7 +30,7 @@ def query_orders_on_date_range(order_with_no_ga_id):
     # Prepare a JSONB array for the SQL query, with the correct data types 
     ga_products_to_match = [ 
         { 
-            "name": p['name'],  
+            "item_id": p['item_id'],  
             "price": float(p['price']), 
             "quantity": p['quantity'] 
         } 
@@ -44,7 +44,7 @@ def query_orders_on_date_range(order_with_no_ga_id):
     query = """ 
         SELECT * FROM ga_events  
         WHERE 
-            event_name = 'purchase' 
+            event_name IN ('purchase', 'form_submit', 'add_payment_info', 'add_shipping_info', 'begin_checkout', 'add_to_cart')
             AND DATE(event_timestamp) BETWEEN %s AND %s 
             AND (event_params->>'order_total')::numeric = %s 
             AND (event_params->>'shipping_value')::numeric = %s 
