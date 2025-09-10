@@ -20,7 +20,6 @@ def main_run():
     process_orders()
 
 def background_worker():
-    """Run main_run every 3 minutes."""
     while True:
         try:
             print("Running main_run()...")
@@ -28,15 +27,14 @@ def background_worker():
             print("main_run() completed. Sleeping 3 minutes...")
         except Exception as e:
             print(f"Error in main_run: {e}")
-        time.sleep(180)  # 3 minutes
+        time.sleep(180)
 
 @app.route("/")
 def index():
     return jsonify({"status": "running", "message": "Background job is active."})
 
 if __name__ == "__main__":
-    # Start background thread
     worker_thread = threading.Thread(target=background_worker, daemon=True)
     worker_thread.start()
-    # Start Flask server
-    app.run(host="0.0.0.0", port=5000)
+
+    app.run(host="0.0.0.0", port=5000) # TODO what configuration fits vercel
