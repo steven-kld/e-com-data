@@ -4,7 +4,7 @@ function pingFastAPI() {
         const response = UrlFetchApp.fetch(url);
         Logger.log("Ping success: " + response.getResponseCode());
     } catch (e) {
-        Logger.log("Ping failed: " + e);
+        Logger.log("Ping failed: " + e); 
     }
 }
   
