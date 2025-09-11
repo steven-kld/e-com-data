@@ -1,10 +1,7 @@
 import os
 import json
 import requests
-from dotenv import load_dotenv
-from .db import run_query
-
-load_dotenv()
+from db import run_query
 
 def get_orders_data(api_key: str, domain: str, created_at_min: str):
     orders_url = f"https://{domain}/admin/api/2023-10/orders.json"

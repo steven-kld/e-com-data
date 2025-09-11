@@ -1,6 +1,6 @@
 import json 
 from datetime import timedelta, datetime 
-from .db import run_query 
+from db import run_query 
 
 def query_orders_with_no_pseudo_ids():
     yesterday = datetime.now().date() - timedelta(days=1)
