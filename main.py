@@ -21,6 +21,7 @@ def main_run():
         insert_or_update_customer_from_order(order)
         insert_order_data(order)
     process_orders()
+    print("Task ended")
 
 @app.get("/")
 def index():
