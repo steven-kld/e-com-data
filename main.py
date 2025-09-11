@@ -22,19 +22,13 @@ def main_run():
         insert_order_data(order)
     process_orders()
 
-def background_worker():
-    while True:
-        try:
-            print("Running main...")
-            main_run()
-            print("Run completed. Sleeping 3 minutes...")
-        except Exception as e:
-            print(f"Error in main_run: {e}")
-        time.sleep(180)
-
 @app.get("/")
 def index():
     return {"status": "running", "message": "Background job is active."}
 
-worker_thread = threading.Thread(target=background_worker, daemon=True)
-worker_thread.start()
+@app.get("/rundbupdate")
+def run_now():
+    main_run()
+    return {"status": "ok", "message": "Job executed"}
+
+
