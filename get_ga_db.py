@@ -44,11 +44,11 @@ def query_last_ga_events():
                 event_timestamp,
                 event_name,
                 user_pseudo_id,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content') AS utm_content,
                 event_params,
                 ecommerce,
                 items
@@ -67,18 +67,18 @@ def query_last_ga_events():
                 event_timestamp,
                 event_name,
                 user_pseudo_id,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content') AS utm_content,
                 event_params,
                 ecommerce,
                 items
             FROM
                 `{GA_EVENTS_TABLE}`
             WHERE
-                EXISTS (SELECT 1 FROM UNNEST(event_params) AS param WHERE param.key LIKE 'utm_%')
+                EXISTS (SELECT 1 FROM UNNEST(event_params) AS param WHERE param.key IN ('source', 'medium', 'campaign', 'term', 'content'))
         )
 
         UNION ALL
@@ -105,11 +105,11 @@ def query_last_ga_events():
                 event_timestamp,
                 event_name,
                 user_pseudo_id,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_source') AS utm_source,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_medium') AS utm_medium,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_campaign') AS utm_campaign,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_term') AS utm_term,
-                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'utm_content') AS utm_content,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source') AS utm_source,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'medium') AS utm_medium,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'campaign') AS utm_campaign,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'term') AS utm_term,
+                (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content') AS utm_content,
                 event_params,
                 ecommerce,
                 items
@@ -149,7 +149,7 @@ def query_last_ga_events():
                     event_params_flat[key] = value_obj['float_value']
                 elif value_obj.get('double_value') is not None:
                     event_params_flat[key] = value_obj['double_value']
-        
+
         processed_dict['utm_source'] = event_params_flat.get('source')
         processed_dict['utm_campaign'] = event_params_flat.get('campaign')
         processed_dict['utm_medium'] = event_params_flat.get('medium')
