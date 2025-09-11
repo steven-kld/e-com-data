@@ -9,9 +9,6 @@ from google.analytics.data_v1beta.types import (
 )
 from google.oauth2.service_account import Credentials
 
-# from dotenv import load_dotenv
-# load_dotenv()
-
 def init_google_credentials():
     """
     Initializes Google credentials from environment variables for secure access.

@@ -3,9 +3,6 @@ import psycopg2
 from psycopg2.extras import execute_values
 from psycopg2.errors import UniqueViolation, ForeignKeyViolation
 
-# from dotenv import load_dotenv
-# load_dotenv()
-
 def get_db_config():
     return {
         "host": os.getenv("POSTGRESQL_HOST"),

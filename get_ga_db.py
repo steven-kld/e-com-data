@@ -1,10 +1,11 @@
-import os, json
-from datetime import datetime
+import os, json, pytz
+from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials
 from google.cloud import bigquery
 from db import run_many_query
 
 GA_EVENTS_TABLE = os.getenv('GA_EVENTS_TABLE')
+ORG_TIMEZONE = os.getenv('ORG_TIMEZONE')
 
 def init_google_credentials():
     try:
@@ -211,7 +212,7 @@ def insert_ga_events(events_list):
         VALUES %s
         ON CONFLICT (ga_user_pseudo_id, event_timestamp) DO NOTHING
     """
-    
+    print('before')
     data_to_insert = []
     for event in events_list:
         # Check for required fields before processing
@@ -222,8 +223,12 @@ def insert_ga_events(events_list):
         # Convert BigQuery's microsecond timestamp (BIGINT) to a Python datetime object
         event_timestamp_bigint = event.get('event_timestamp')
         try:
-            event_dt = datetime.fromtimestamp(event_timestamp_bigint / 1_000_000)
-            event_dt_str = event_dt.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+            # Set local timezone to match Shopify
+            utc_dt = datetime.fromtimestamp(event_timestamp_bigint / 1_000_000, tz=timezone.utc)
+            local_tz = pytz.timezone(ORG_TIMEZONE)
+            local_dt = utc_dt.astimezone(local_tz)
+            event_dt_str = local_dt.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+
         except (ValueError, TypeError) as e:
             print(f"WARNING: Could not convert timestamp {event_timestamp_bigint}. Error: {e}")
             continue
