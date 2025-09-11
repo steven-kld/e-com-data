@@ -1,6 +1,6 @@
 # e-com-data
 
-git cron
+git cron | Requires a ghp with workflow permit
 
 ```yml
 name: Ping Vercel Endpoint
