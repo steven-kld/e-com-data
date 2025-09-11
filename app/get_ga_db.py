@@ -3,7 +3,7 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 from google.cloud import bigquery
 from dotenv import load_dotenv
-from db import run_many_query
+from .db import run_many_query
 
 load_dotenv()
 
@@ -131,7 +131,7 @@ def query_last_ga_events():
     processed_rows = []
     for row in results:
         row_dict = dict(row.items())
-        # print(json.dumps(row_dict, indent=2))
+        
         processed_dict = {}
         processed_dict['event_timestamp'] = row_dict.get('event_timestamp')
         processed_dict['event_name'] = row_dict.get('event_name')
@@ -170,8 +170,12 @@ def query_last_ga_events():
             for product in row_dict['items']:
                 price = product.get('price') or 0
                 quantity = product.get('quantity') or 0
+                try:
+                    item_id = int(product.get('item_id', 0))
+                except:
+                    item_id = 0
                 products_list.append({
-                    "item_id": int(product.get('item_id', 0)),
+                    "item_id": item_id,
                     "price": float(price),
                     "quantity": int(quantity)
                 })

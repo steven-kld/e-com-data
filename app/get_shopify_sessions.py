@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
-from db import run_query
+from .db import run_query
 
 load_dotenv()
 
