@@ -1,2 +1,14 @@
 .env
-/__pycache__*
+
+*.pyc
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
