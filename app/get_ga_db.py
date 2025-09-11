@@ -2,10 +2,7 @@ import os, json
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from google.cloud import bigquery
-from dotenv import load_dotenv
 from .db import run_many_query
-
-load_dotenv()
 
 GA_EVENTS_TABLE = os.getenv('GA_EVENTS_TABLE')
 
