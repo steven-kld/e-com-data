@@ -1,6 +1,4 @@
 from fastapi import FastAPI
-import threading
-import time
 from get_ga_db import query_last_ga_events, insert_ga_events
 from get_shopify_sessions import extract_last_shopify_orders, insert_or_update_customer_from_order, insert_order_data
 from match_orders import process_orders
