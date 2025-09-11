@@ -1,20 +1,6 @@
 # e-com-data
 
-git cron | Requires a ghp with workflow permit
-
-```yml
-name: Ping Vercel Endpoint
-on:
-  schedule:
-    - cron: "*/5 * * * *"  # every 5 minutes
-
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call FastAPI endpoint
-        run: curl -s https://your-vercel-project.vercel.app/run-db-update
-```
+Use GAS to trigger Vercel on 5 min basis
 
 CREATE TABLE customers (
     shopify_customer_id BIGINT PRIMARY KEY,

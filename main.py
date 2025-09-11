@@ -8,7 +8,6 @@ from match_orders import process_orders
 
 app = FastAPI()
 
-
 def main_run():
     ga_events = query_last_ga_events()
     if ga_events:
