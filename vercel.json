@@ -4,11 +4,5 @@
             "src": "/(.*)",
             "dest": "main.py"
         }
-    ],
-    "crons": [
-    {
-      "path": "/run-db-update",
-      "schedule": "*/3 * * * *"
-    }
-  ]
+    ]
 }

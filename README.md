@@ -1,5 +1,21 @@
 # e-com-data
 
+git cron
+
+```yml
+name: Ping Vercel Endpoint
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # every 5 minutes
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call FastAPI endpoint
+        run: curl -s https://your-vercel-project.vercel.app/run-db-update
+```
+
 CREATE TABLE customers (
     shopify_customer_id BIGINT PRIMARY KEY,
     ga_user_pseudo_id TEXT[],

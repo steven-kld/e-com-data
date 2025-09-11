@@ -26,8 +26,8 @@ def main_run():
 def index():
     return {"status": "running", "message": "Background job is active."}
 
-@app.get("/rundbupdate")
-def run_now():
+@app.get("/run-db-update")
+def run_db_update():
     main_run()
     return {"status": "ok", "message": "Job executed"}
 
