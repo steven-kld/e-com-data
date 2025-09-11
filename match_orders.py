@@ -128,7 +128,7 @@ def set_min_event_delta_utms(last_events, purchase_date_obj):
                 "utm_term": event.get('utm_term', "")
             }
 
-        return min_event_delta_utms
+    return min_event_delta_utms
 
 def process_orders(): 
     orders = query_orders_with_no_pseudo_ids()
