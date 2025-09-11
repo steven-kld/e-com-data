@@ -9,4 +9,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call FastAPI endpoint
-        run: curl -s https://e-com-data.vercel.app/run-db-update/run-db-update
+        run: curl -s https://e-com-data.vercel.app/run-db-update
