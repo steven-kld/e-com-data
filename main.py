@@ -32,7 +32,7 @@ def background_worker():
             print(f"Error in main_run: {e}")
         time.sleep(180)
 
-@app.route("/")
+@app.get("/")
 def index():
     return {"status": "running", "message": "Background job is active."}
 
