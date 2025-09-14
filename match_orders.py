@@ -209,7 +209,7 @@ def process_orders():
                 )
         else: 
             print("Could not find a valid match for this order.")
-         
-        print("---") 
+
+        print("---")
 
 
