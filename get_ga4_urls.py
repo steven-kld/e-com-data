@@ -1,10 +1,10 @@
-import os, re
+import os, re, json
 from urllib.parse import urlparse, parse_qs, urlunparse
 from datetime import timedelta, date
 from google.oauth2.service_account import Credentials
 from google.cloud import bigquery
 import pandas as pd
-import numpy as np
+from get_shopify_sessions import get_orders_data, get_products_by_ids
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -74,9 +74,13 @@ def clean_url(url):
 def get_target_page(url):
     if pd.isna(url) or not isinstance(url, str):
         return url
+    
     parsed_url = urlparse(url)
-    return re.sub(r'[^a-zA-Z0-9/\-]', '', parsed_url.path)
+    path = parsed_url.path
 
+    cleaned_path = re.sub(r'(%[0-9a-fA-F]{2,4})|(\\u[0-9a-fA-F]{4})', '', path)
+    final_path = re.sub(r'[^a-zA-Z0-9/\-]', '', cleaned_path)
+    return final_path
 
 def query_ga_events_for_google_ads(client, days_ago=7):    
     n_days_ago = (date.today() - timedelta(days=days_ago)).strftime('%Y-%m-%d')
@@ -134,6 +138,36 @@ def ads_raw_report_to_df(raw_path='ads_url_report.csv'):
         except Exception as e:
             print(f"Error on report saving: {e}")
 
+def parse_landing_site_url(url_string):
+    parsed_url = urlparse(url_string)
+    query_params = parse_qs(parsed_url.query)
+
+    utm_source = query_params.get('utm_source', [None])[0]
+    utm_medium = query_params.get('utm_medium', [None])[0]
+    utm_campaign = query_params.get('utm_campaign', [None])[0]
+    utm_content = query_params.get('utm_content', [None])[0]
+    utm_term = query_params.get('utm_term', [None])[0]
+    gad_campaignid = query_params.get('gad_campaignid', [None])[0]
+    gbraid = query_params.get('gbraid', [None])[0]
+    gclid = query_params.get('gclid', [None])[0]
+
+    target_page = parsed_url.path
+    final_target_page = re.sub(r'[^a-zA-Z0-9/\-]', '', target_page)
+
+    return {
+        "utm_source": utm_source,
+        "utm_medium": utm_medium,
+        "utm_campaign": utm_campaign,
+        "utm_content": utm_content,
+        "utm_term": utm_term,
+        "gad_campaignid": gad_campaignid,
+        "gbraid": gbraid,
+        "gclid": gclid,
+        "path": target_page,
+        "target_page": final_target_page
+    }
+
+
 def ga_raw_events_to_df():
     credentials = init_google_credentials()
     if credentials:
@@ -181,62 +215,6 @@ def query_purchase_events(user_pseudos, days_ago=7):
             purchase['item_urls'] = item_urls
         return purchases
 
-# def get_distinct_df():
-#     credentials = init_google_credentials()
-#     if credentials:
-#         client = bigquery.Client(credentials=credentials)
-#         events_df = query_ga_events_for_google_ads(client, days_ago=7)
-#         if not events_df.empty:
-#             events_df['clean_link'] = events_df['page_location'].apply(
-#                 lambda x: urlparse(x)._replace(query='', params='').geturl()
-#             )
-#             events_df['target_page'] = events_df['clean_link'].apply(get_target_page)
-#             events_df['gbraid'] = events_df['page_location'].apply(extract_gbraid)
-            
-#             distinct_df = events_df.drop_duplicates(subset=['user_pseudo_id', 'utm_campaign', 'page_location']).copy()
-            
-#             target_pseudos = distinct_df['user_pseudo_id'].tolist()
-#             purchases = query_purchase_events(client, target_pseudos, days_ago=7)
-#             purchase_map = {}
-#             for purchase in purchases:
-#                 pseudo = purchase['user_pseudo_id']
-#                 if pseudo not in purchase_map:
-#                     purchase_map[pseudo] = {
-#                         'product_names': [],
-#                         'product_urls': [],
-#                         'product_prices': [],
-#                         'product_quantities': []
-#                     }
-                
-#                 for item in purchase['items']:
-#                     item_url = None
-#                     for param in item['item_params']:
-#                         if param['key'] == 'item_url':
-#                             item_url = param['value']['string_value']
-#                             break
-                    
-#                     purchase_map[pseudo]['product_names'].append(item.get('item_name'))
-#                     purchase_map[pseudo]['product_urls'].append(item_url)
-#                     purchase_map[pseudo]['product_prices'].append(item.get('price'))
-#                     purchase_map[pseudo]['product_quantities'].append(item.get('quantity'))
-            
-#             for col in ['product_names', 'product_urls', 'product_prices', 'product_quantities']:
-#                 distinct_df[col] = distinct_df['user_pseudo_id'].map(lambda x: purchase_map.get(x, {}).get(col, []))
-
-#             purchases_df = distinct_df[distinct_df['product_names'].str.len() > 0].copy()
-
-#             # Calculate the total price for each row
-#             purchases_df['total_price'] = purchases_df.apply(
-#                 lambda row: np.dot(row['product_prices'], row['product_quantities']), axis=1
-#             )
-            
-#             return purchases_df
-
-#         else:
-#             print("No events found matching the criteria.")
-#             return
-
-
 def match_gad_target_page_slices_with_ga_events(ads_df, ga_df):
     if 'metrics.clicks' not in ads_df.columns:
         print("ads_df is missing the 'metrics.clicks' column.")
@@ -251,40 +229,101 @@ def match_gad_target_page_slices_with_ga_events(ads_df, ga_df):
     )
     
     return matched_events
+
+
+def match_and_aggregate_revenue(ads_df, orders):
+    if 'target_page' not in ads_df.columns or 'gad_campaignid' not in ads_df.columns:
+        print("ads_df is missing required columns. Cannot proceed.")
+        return ads_df
+        
+    ads_df['total_revenue'] = 0.0
+    ads_df['total_purchases'] = 0.0
+    ads_df['items'] = [[] for _ in range(len(ads_df))]
+    ads_df['handles'] = [[] for _ in range(len(ads_df))]
     
+    lookup_dict = {
+        (row['target_page'], str(row['gad_campaignid'])): index 
+        for index, row in ads_df.iterrows()
+    }
+    
+    for order in orders:
+        order_target_page = order.get('target_page')
+        order_gad_campaignid = order.get('gad_campaignid')
+        # Check if the keys exist and are not None before creating the lookup key
+        if order_target_page and order_gad_campaignid:
+            match_key = (order_target_page, str(order_gad_campaignid))
+            
+            if match_key in lookup_dict:
+                match_index = lookup_dict[match_key]
+                
+                # Use .loc to safely update the DataFrame row by index
+                ads_df.loc[match_index, 'total_revenue'] += order.get('net_revenue', 0.0)
+                ads_df.loc[match_index, 'total_purchases'] += 1
+
+                # Get the existing list of items and extend it
+                existing_items = ads_df.loc[match_index, 'items']
+                new_item_ids = [item.get('item_id') for item in order['products']]
+                existing_items.extend(new_item_ids)
+                existing_handles = ads_df.loc[match_index, 'handles']
+                new_item_handles = [item.get('handle') for item in order['products']]
+                existing_handles.extend(new_item_handles)
+                
+    return ads_df
+
+def add_is_waste_column(df):
+    if df.empty or 'metrics.cost' not in df.columns or 'total_purchases' not in df.columns:
+        raise ValueError("DataFrame is empty or missing required columns.")
+    
+    converting_campaigns = df[df['total_purchases'] > 0].copy()
+    total_cost_conv = converting_campaigns['metrics.cost'].sum()
+    total_conversions_conv = converting_campaigns['total_purchases'].sum()
+    acpc = total_cost_conv / total_conversions_conv if total_conversions_conv > 0 else 0
+    threshold = acpc * 1.5
+    print(threshold)
+    df['cpa'] = df.apply(
+        lambda row: row['metrics.cost'] / row['total_purchases'] if row['total_purchases'] > 0 else row['metrics.cost'],
+        axis=1
+    )
+
+    df['is_waste'] = df['cpa'] > threshold
+
+    return df
+
+
+
 if __name__ == '__main__':
+    from_date = date(2025, 8, 16)
+    orders_data = get_orders_data(os.getenv("SHOPIFY_API_KEY"), os.getenv("SHOPIFY_DOMAIN"), from_date.isoformat())
+
+    orders = []
+    products_dict = {}
+    if orders_data:
+        for order in orders_data:
+            params = parse_landing_site_url(order.get('landingSite'))
+            params['products'] = order['products']
+            for product in order['products']:
+                products_dict[product['item_id']] = ''
+            params['net_revenue'] = sum(float(item.get('price', 0)) * float(item.get('quantity', 0)) for item in order['products'])
+            if params.get('utm_source') == 'google':
+                orders.append(params)
+
+    products_with_handles = get_products_by_ids(products_dict)
+    for order in orders:
+        for product in order['products']:
+            item_id = product.get('item_id')
+            if item_id:
+                product['handle'] = products_with_handles.get(item_id)
+
     ads_df = ads_raw_report_to_df('ads_url_report.csv')
-    ga_df = ga_raw_events_to_df()
-    matched_events_df = match_gad_target_page_slices_with_ga_events(ads_df, ga_df)
+    if not ads_df.empty and orders:
+        final_report_df = match_and_aggregate_revenue(ads_df, orders)
+        add_is_waste_column(final_report_df)
+        print("\n--- Final Report with Revenue and Items ---")
+        print(final_report_df)
+        
+        output_file_name = 'final_ads_ga4_report.xlsx'
+        final_report_df.to_excel(output_file_name, index=False)
+        print(f"Report saved: {output_file_name}")
 
-    if not matched_events_df.empty:
-        # Step 1: Get unique user_pseudo_ids from the matched events
-        unique_pseudos = matched_events_df['user_pseudo_id'].unique().tolist()
-        
-        # Step 2: Query for purchases for these unique users
-        purchases = query_purchase_events(unique_pseudos, days_ago=7)
-        
-        # Step 3: Process the purchase data into a DataFrame and calculate total revenue
-        if purchases:
-            purchases_df = pd.DataFrame(purchases)
-            # The 'value' and 'shipping' can be None, so fill with 0
-            purchases_df['value'] = purchases_df['value'].fillna(0)
-            purchases_df['shipping'] = purchases_df['shipping'].fillna(0)
-            purchases_df['net_revenue'] = purchases_df['value'] - purchases_df['shipping']
-            
-            # Step 4: Merge the total revenue back into the matched_events_df
-            final_report = pd.merge(
-                matched_events_df,
-                purchases_df[['user_pseudo_id', 'net_revenue', 'item_urls']],
-                on='user_pseudo_id',
-                how='left'
-            )
-            
-            # Finalize the report
-            final_report['net_revenue'] = final_report['net_revenue'].fillna(0)
-            output_file_name = 'final_ads_ga4_report.xlsx'
-            final_report.to_excel(output_file_name, index=False)
     else:
-        print("No matching GA events found for Ads clicks.")
-
-
+        print("No Ads data or Google-sourced orders found.")

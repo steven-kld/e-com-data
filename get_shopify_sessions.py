@@ -1,7 +1,6 @@
-import os
-import json
-import requests
+import os, time, requests, json, re
 from db import run_query
+import pandas as pd
 
 def get_orders_data(api_key: str, domain: str, created_at_min: str):
     orders_url = f"https://{domain}/admin/api/2023-10/orders.json"
@@ -9,69 +8,85 @@ def get_orders_data(api_key: str, domain: str, created_at_min: str):
         "X-Shopify-Access-Token": api_key,
         "Content-Type": "application/json"
     }
-    
-    orders_params = {
+
+    all_orders = []
+    initial_params = {
+        "limit": 50,
         "created_at_min": created_at_min
     }
+    
 
-    try:
-        orders_response = requests.get(orders_url, headers=headers, params=orders_params)
-        orders_response.raise_for_status()
-        orders = orders_response.json().get('orders', [])
-        
-        orders_data = []
-        for order in orders:
-            # Safely access the customer object
-            customer = order.get('customer', {})
-            customer_email = customer.get('email')
+    next_page_url = f"{orders_url}?{requests.compat.urlencode(initial_params)}"
+
+    while next_page_url:
+        try:
+            orders_response = requests.get(next_page_url, headers=headers)
+            orders_response.raise_for_status()
+            orders_page = orders_response.json().get('orders', [])
+
+            if not orders_page:
+                break
+
+            for order in orders_page:
+                customer = order.get('customer', {})
+                customer_email = customer.get('email')
+                customer_first_name = customer.get('first_name')
+                customer_last_name = customer.get('last_name')
+                customer_created_at = customer.get('created_at')
+                billing_address = order.get('billing_address', {})
+                customer_phone = billing_address.get('phone')
+                products_list = []
+                products_total_price = 0.0
+                line_items = order.get('line_items', [])
+                for item in line_items:
+                    product_id = item.get('product_id')
+                    product_price = float(item.get('price', '0.0'))
+                    product_quantity = float(item.get('quantity', '0.0'))
+                    
+                    products_list.append({
+                        "item_id": product_id,
+                        "price": product_price,
+                        "quantity": product_quantity
+                    })
+                    products_total_price += product_price * product_quantity
+
+                order_total = float(order.get('total_price', '0.0'))
+                delivery_price = order_total - products_total_price
+                
+                order_data = {
+                    "orderId": order.get('id'),
+                    "landingSite": order.get('landing_site'),
+                    "customerId": customer.get('id'),
+                    "customerEmail": customer_email,
+                    "customerPhone": customer_phone,
+                    "customerFirstName": customer_first_name,
+                    "customerLastName": customer_last_name,
+                    "customerCreatedAt": customer_created_at,
+                    "orderDate": order.get('created_at'),
+                    "orderTotal": order_total,
+                    "orderDeliveryPrice": delivery_price,
+                    "products": products_list
+                }
+                all_orders.append(order_data)
+
+            link_header = orders_response.headers.get('Link')
             
-            # --- Access customer name and creation date ---
-            customer_first_name = customer.get('first_name')
-            customer_last_name = customer.get('last_name')
-            customer_created_at = customer.get('created_at')
+            # Use regex to find the 'rel="next"' URL reliably
+            next_url_match = re.search(r'<(.*?)>; rel="next"', link_header if link_header else '')
+            
+            if next_url_match:
+                next_page_url = next_url_match.group(1)
+            else:
+                next_page_url = None
+            
+            time.sleep(0.5)
 
-            # --- Access phone from billing_address ---
-            billing_address = order.get('billing_address', {})
-            customer_phone = billing_address.get('phone')
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to get orders: {e}")
+            return None
 
-            # --- Get product names and URLs ---
-            products_list = []
-            line_items = order.get('line_items', [])
-            for item in line_items:
-                product_id = item.get('product_id')
-                product_price = item.get('price')
-                product_quantity = item.get('quantity')
+    return all_orders
 
-                products_list.append({
-                    "item_id": product_id,
-                    "price": product_price,
-                    "quantity": product_quantity
-                })
-            products_total_price = 0
-            for item in line_items: 
-                products_total_price += float(item.get('price', '0.0')) * float(item.get('quantity', '0.0'))
-            delivery_price = float(order.get('total_price', '0.0')) - float(products_total_price)
-
-            order_data = {
-                "orderId": order.get('id'),
-                "customerId": customer.get('id'),
-                "customerEmail": customer_email,
-                "customerPhone": customer_phone,
-                "customerFirstName": customer_first_name,
-                "customerLastName": customer_last_name,
-                "customerCreatedAt": customer_created_at,
-                "orderDate": order.get('created_at'),
-                "orderTotal": order.get('total_price'),
-                "orderDeliveryPrice": delivery_price,
-                "products": products_list
-            }
-            orders_data.append(order_data)
-        
-        return orders_data
-        
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while calling the Shopify API: {e}")
-        return None
 
 def extract_last_shopify_orders():
     last_order_date = run_query(
@@ -152,3 +167,81 @@ def insert_order_data(order_data):
             json.dumps(order_data.get('products'))
         )
     )
+
+def get_products_by_ids(item_ids_dict):
+    def clean_handle(handle):
+        if pd.isna(handle) or not isinstance(handle, str):
+            return handle
+            
+        # Remove Python-style Unicode escape sequences
+        cleaned_handle = re.sub(r'\\u[0-9a-fA-F]{4}', '', handle)
+        
+        # Remove raw Unicode emojis
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\U0001F700-\U0001F77F"
+            "\U0001F780-\U0001F7FF"
+            "\U0001F800-\U0001F8FF"
+            "\U0001F900-\U0001F9FF"
+            "\U0001FA00-\U0001FA6F"
+            "\U0001FA70-\U0001FAFF"
+            "\U00002702-\U000027B0"
+            "]+", flags=re.UNICODE)
+            
+        final_handle = emoji_pattern.sub(r'', cleaned_handle)
+        
+        # Remove any other non-standard characters, leaving only a-z, 0-9, and dashes.
+        final_handle = re.sub(r'[^a-zA-Z0-9\-]', '', final_handle)
+        
+        return final_handle
+
+    if not item_ids_dict:
+        return {}
+    
+    shopify_api_key = os.getenv('SHOPIFY_API_KEY')
+    shopify_domain = os.getenv('SHOPIFY_DOMAIN')
+    
+    products_url = f"https://{shopify_domain}/admin/api/2023-10/products.json"
+    headers = {
+        "X-Shopify-Access-Token": shopify_api_key,
+        "Content-Type": "application/json"
+    }
+    
+    all_products_with_handles = {}
+    chunk_size = 50
+    
+    item_ids = [item_id for item_id in item_ids_dict.keys() if item_id is not None]
+    
+    for i in range(0, len(item_ids), chunk_size):
+        chunk = item_ids[i:i + chunk_size]
+        ids_string = ",".join(map(str, chunk))
+        
+        params = {
+            "ids": ids_string
+        }
+
+        try:
+            response = requests.get(products_url, headers=headers, params=params)
+            response.raise_for_status()
+
+            products_page = response.json().get('products', [])
+            for product in products_page:
+                product_id = product.get('id')
+                product_handle = product.get('handle')
+
+                if product_id and product_handle:
+                    # Apply cleaning function before storing
+                    cleaned_handle = clean_handle(product_handle)
+                    all_products_with_handles[product_id] = cleaned_handle
+
+            time.sleep(0.5)
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching products for chunk starting at index {i}: {e}")
+            return {}
+            
+    return all_products_with_handles
+
