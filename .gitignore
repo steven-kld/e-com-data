@@ -1,5 +1,5 @@
 .env
-
+*.xlsx
 *.pyc
 __pycache__/
 *.py[cod]
